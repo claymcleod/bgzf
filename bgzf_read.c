@@ -15,6 +15,17 @@
 #include <stdint.h>
 
 /**
+ * Get a file's size.
+ */
+int get_file_size(FILE *fp)
+{
+	fseek(fp, 0, SEEK_END);
+	int size = ftell(fp);
+	fseek(fp, 0, SEEK_SET);
+	return size;
+}
+
+/**
  * Read a number of bytes from a file into a buffer.
  */
 void read_bytes(uint8_t *buffer, int num_bytes, FILE *fp)
@@ -55,6 +66,8 @@ uint32_t bytes_to_int(uint8_t* arr, int offset)
  */
 int read_bgzf_block(FILE *fp)
 {
+	static int total_bytes_read=0;
+
 	/**
 	 * Header
 	 */
@@ -105,27 +118,30 @@ int read_bgzf_block(FILE *fp)
 	 */
 
 	printf("\n");
-	uint16_t total_blocks=block_size-extra_length-19;
-	uint8_t data_buf[total_blocks];
+	uint16_t total_compressed_bytes=block_size-extra_length-19;
+	uint8_t data_buf[total_compressed_bytes];
 	uint8_t crc32_buf[4];
 	uint8_t input_size_buf[4];
 
 	/** We can just fseek over the bits rather than reading into mem **/
-	fseek(fp, total_blocks, SEEK_CUR);
-	//read_bytes(data_buf, total_blocks, fp);
+	fseek(fp, total_compressed_bytes, SEEK_CUR);
+	total_bytes_read += total_compressed_bytes;
+	//read_bytes(data_buf, total_compressed_bytes, fp);
 	
 	read_bytes(crc32_buf, 4, fp);
 	read_bytes(input_size_buf, 4, fp);
 	int crc32 = bytes_to_int(crc32_buf, 0);
 	int input_size = bytes_to_int(input_size_buf, 0);
 	printf("  [*] Data:\n");
-	printf("    - Compressed # of bytes => %u\n", total_blocks);
+	printf("    - Compressed # of bytes => %u\n", total_compressed_bytes);
 	printf("    - CRC32                 => %u\n", crc32);
 	printf("    - Raw input length      => %u\n", input_size);
 
 	/** End block check **/
-	if (crc32 == 0 && input_size == 0) 
+	if (crc32 == 0 && input_size == 0) {
+		printf("\n\nCounted %d compressed data bytes in total.\n", total_bytes_read);	
 		return 0;
+	} 
 
 	return 1;
 }
@@ -161,6 +177,7 @@ int main(int argc, char* argv[])
 
 	FILE *bgzfFile;
 	bgzfFile = fopen(argv[1], "r");
+	printf("File size: %d bytes", get_file_size(bgzfFile));
 	parse_bgzf(bgzfFile);
 	fclose(bgzfFile);
 }
